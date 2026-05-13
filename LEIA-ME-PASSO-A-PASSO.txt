@@ -1,0 +1,54 @@
+PATCH V2 — APP MEMÓRIAS DO CASAMENTO / GALERIA PÚBLICA
+
+O que este patch faz:
+1. Mantém o design mobile que você gerou.
+2. Mantém upload real para o Supabase Storage.
+3. Limita o envio para 10 fotos por vez.
+4. Limita cada foto a 10 MB.
+5. Remove vídeo por enquanto, para proteger o plano gratuito com 200 convidados.
+6. Troca a área restrita por uma galeria pública.
+7. Adiciona botão "Ver galeria" na tela principal.
+8. A galeria pública fica em /galeria.
+9. Mantém /admin redirecionando para a mesma galeria, para não quebrar se alguém acessar o caminho antigo.
+
+ARQUIVOS PARA SUBSTITUIR:
+- src/App.tsx
+- package.json
+- .env.example
+
+ARQUIVOS NOVOS PARA COLOCAR:
+- src/supabaseClient.ts
+- src/config.ts
+- src/uploadService.ts
+- src/adminService.ts
+- supabase_setup.sql
+
+PASSO A PASSO SIMPLES:
+
+1) No seu projeto original, copie os arquivos deste patch para dentro da pasta do projeto.
+
+2) Quando o Windows perguntar se deseja substituir, clique em:
+   SIM / SUBSTITUIR.
+
+3) No Supabase, rode o arquivo:
+   supabase_setup.sql
+
+4) Na pasta principal do projeto, crie um arquivo chamado .env com:
+   VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+   VITE_SUPABASE_ANON_KEY=SUA_CHAVE_ANON_PUBLIC
+
+5) No terminal, dentro da pasta do projeto, rode:
+   npm install
+   npm run dev
+
+6) Teste o envio em:
+   http://localhost:3000
+
+7) Teste a galeria pública em:
+   http://localhost:3000/galeria
+
+IMPORTANTE:
+- Os convidados não precisam criar conta.
+- A galeria é aberta para quem tiver o link.
+- Como a galeria é pública, qualquer convidado que acessar /galeria verá as fotos enviadas.
+- Não liberei vídeos agora para proteger o plano gratuito.
