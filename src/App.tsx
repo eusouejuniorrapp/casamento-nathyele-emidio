@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { UploadCloud, Camera, Heart, CheckCircle2, Image as ImageIcon, X, RefreshCw, Download, Images } from 'lucide-react';
-import { uploadWeddingPhotos } from './uploadService';
+import { UploadCloud, Camera, Heart, CheckCircle2, Image as ImageIcon, X, RefreshCw, Download, Images, FileVideo } from 'lucide-react';
+import { uploadWeddingMedia } from './uploadService';
 import { listWeddingUploads, type WeddingUpload } from './adminService';
-import { ACCEPTED_IMAGE_TYPES, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, MAX_FILES } from './config';
+import { ACCEPTED_FILE_EXTENSIONS, ACCEPTED_MEDIA_TYPES, MAX_FILES, MAX_PHOTO_SIZE_BYTES, MAX_PHOTO_SIZE_MB, MAX_VIDEO_SIZE_BYTES, MAX_VIDEO_SIZE_MB } from './config';
 import { isSupabaseConfigured } from './supabaseClient';
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
@@ -10,6 +10,26 @@ type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 function formatFileSize(bytes: number) {
   if (!bytes) return '0 MB';
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function getFileExtension(fileName: string) {
+  const dotIndex = fileName.lastIndexOf('.');
+  return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : '';
+}
+
+function isVideoFile(file: File) {
+  const extension = getFileExtension(file.name);
+  return file.type.startsWith('video/') || ['.mp4', '.mov', '.m4v', '.webm'].includes(extension);
+}
+
+function isAcceptedMediaFile(file: File) {
+  const extension = getFileExtension(file.name);
+  return ACCEPTED_MEDIA_TYPES.includes(file.type) || ACCEPTED_FILE_EXTENSIONS.includes(extension);
+}
+
+function isVideoUpload(item: WeddingUpload) {
+  const extension = getFileExtension(item.file_name);
+  return item.file_type?.startsWith('video/') || ['.mp4', '.mov', '.m4v', '.webm'].includes(extension);
 }
 
 function GalleryPage() {
@@ -42,11 +62,11 @@ function GalleryPage() {
             <div>
               <p className="text-[#a89f91] text-xs font-semibold tracking-[0.2em] uppercase mb-2">Nathyele e Emídio</p>
               <h1 className="font-serif text-3xl sm:text-4xl">Galeria de Memórias</h1>
-              <p className="text-sm text-[#4a4542]/70 mt-2">Veja as fotos compartilhadas pelos convidados.</p>
+              <p className="text-sm text-[#4a4542]/70 mt-2">Veja as fotos e vídeos compartilhados pelos convidados.</p>
             </div>
             <div className="flex flex-col sm:flex-row gap-3">
               <a href="/" className="inline-flex items-center justify-center gap-2 bg-[#fbf9f6] border border-[#e8ede7] px-4 py-3 rounded-2xl shadow-sm text-sm font-medium">
-                <Camera size={18} /> Enviar fotos
+                <Camera size={18} /> Enviar arquivos
               </a>
               <button onClick={loadUploads} className="inline-flex items-center justify-center gap-2 bg-white border border-[#e8ede7] px-4 py-3 rounded-2xl shadow-sm text-sm font-medium">
                 <RefreshCw size={18} /> Atualizar
@@ -55,7 +75,7 @@ function GalleryPage() {
           </div>
         </div>
 
-        {loading && <p className="bg-white rounded-2xl p-4 border border-[#e8ede7]">Carregando fotos...</p>}
+        {loading && <p className="bg-white rounded-2xl p-4 border border-[#e8ede7]">Carregando memórias...</p>}
         {error && <p className="text-red-500 bg-white rounded-2xl p-4 border border-red-100">{error}</p>}
 
         {!loading && uploads.length === 0 && !error && (
@@ -63,10 +83,10 @@ function GalleryPage() {
             <div className="w-16 h-16 bg-[#f4ece8] rounded-full flex items-center justify-center mx-auto mb-4 text-[#a89f91]">
               <Images size={28} />
             </div>
-            <p className="font-medium">Ainda não chegou nenhuma foto.</p>
-            <p className="text-sm text-[#4a4542]/60 mt-2">Quando os convidados enviarem, elas aparecerão aqui.</p>
+            <p className="font-medium">Ainda não chegou nenhuma memória.</p>
+            <p className="text-sm text-[#4a4542]/60 mt-2">Quando os convidados enviarem fotos ou vídeos, eles aparecerão aqui.</p>
             <a href="/" className="mt-5 inline-flex items-center justify-center gap-2 bg-[#a89f91] text-white px-5 py-3 rounded-2xl shadow-sm text-sm font-medium">
-              Enviar primeiras fotos
+              Enviar primeiras memórias
             </a>
           </div>
         )}
@@ -74,8 +94,12 @@ function GalleryPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {uploads.map((item) => (
             <div key={item.id} className="bg-white border border-[#e8ede7] rounded-3xl overflow-hidden shadow-sm">
-              <a href={item.file_url} target="_blank" rel="noreferrer">
-                <img src={item.file_url} alt={item.file_name} className="w-full aspect-square object-cover bg-[#f4ece8]" loading="lazy" />
+              <a href={item.file_url} target="_blank" rel="noreferrer" className="block bg-[#f4ece8]">
+                {isVideoUpload(item) ? (
+                  <video src={item.file_url} className="w-full aspect-square object-cover bg-[#f4ece8]" controls preload="metadata" />
+                ) : (
+                  <img src={item.file_url} alt={item.file_name} className="w-full aspect-square object-cover bg-[#f4ece8]" loading="lazy" />
+                )}
               </a>
               <div className="p-3">
                 <p className="font-medium text-sm truncate">{item.guest_name}</p>
@@ -111,19 +135,26 @@ export default function App() {
     const errors: string[] = [];
 
     for (const file of selectedFiles) {
-      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-        errors.push(`${file.name}: envie apenas fotos JPG, PNG, WEBP ou HEIC.`);
+      const isVideo = isVideoFile(file);
+      const maxSizeBytes = isVideo ? MAX_VIDEO_SIZE_BYTES : MAX_PHOTO_SIZE_BYTES;
+      const maxSizeMb = isVideo ? MAX_VIDEO_SIZE_MB : MAX_PHOTO_SIZE_MB;
+      const mediaLabel = isVideo ? 'vídeo' : 'foto';
+
+      if (!isAcceptedMediaFile(file)) {
+        errors.push(`${file.name}: envie fotos JPG, PNG, WEBP, HEIC ou vídeos MP4, MOV, M4V ou WEBM.`);
         continue;
       }
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        errors.push(`${file.name}: máximo de ${MAX_FILE_SIZE_MB} MB por foto.`);
+
+      if (file.size > maxSizeBytes) {
+        errors.push(`${file.name}: máximo de ${maxSizeMb} MB por ${mediaLabel}.`);
         continue;
       }
+
       validFiles.push(file);
     }
 
     if (files.length + validFiles.length > MAX_FILES) {
-      errors.push(`Envie no máximo ${MAX_FILES} fotos por vez.`);
+      errors.push(`Envie no máximo ${MAX_FILES} arquivos por vez.`);
       return { validFiles: validFiles.slice(0, Math.max(0, MAX_FILES - files.length)), errors };
     }
 
@@ -159,13 +190,13 @@ export default function App() {
     setError('');
 
     try {
-      await uploadWeddingPhotos(name, files);
+      await uploadWeddingMedia(name, files);
       setStatus('success');
       setFiles([]);
       setName('');
     } catch (err) {
       setStatus('error');
-      setError(err instanceof Error ? err.message : 'Não foi possível enviar as fotos. Tente novamente.');
+      setError(err instanceof Error ? err.message : 'Não foi possível enviar os arquivos. Tente novamente.');
     }
   };
 
@@ -191,7 +222,7 @@ export default function App() {
             <div className="flex flex-col gap-3 w-full max-w-[280px]">
               <button onClick={resetForm} className="px-8 py-4 rounded-full bg-[#fbf9f6] text-[#4a4542] font-medium border border-[#e8ede7] shadow-sm hover:bg-[#e8ede7] transition-colors flex items-center justify-center gap-2">
                 <Camera size={20} />
-                Enviar mais fotos
+                Enviar mais arquivos
               </button>
               <a href="/galeria" className="px-8 py-4 rounded-full bg-[#a89f91] text-white font-medium shadow-sm hover:bg-[#8e8579] transition-colors flex items-center justify-center gap-2">
                 <Images size={20} />
@@ -216,7 +247,7 @@ export default function App() {
             <div className="px-6 pt-6 pb-2 text-center bg-white rounded-t-3xl -mt-4 relative z-20">
               <h2 className="font-serif text-xl font-medium mb-3 text-[#4a4542]">Memórias do Casamento</h2>
               <p className="text-sm text-[#4a4542]/70 leading-relaxed max-w-[280px] mx-auto">
-                Escaneie o QR Code, envie suas melhores fotos e ajude a guardar esse dia para sempre.
+                Escaneie o QR Code, envie suas melhores fotos e vídeos e ajude a guardar esse dia para sempre.
               </p>
             </div>
 
@@ -234,14 +265,15 @@ export default function App() {
               </div>
 
               <div className="mb-6 flex-1 flex flex-col">
-                <label className="block text-sm font-medium text-[#4a4542]/80 mb-2 ml-1">Fotos</label>
+                <label className="block text-sm font-medium text-[#4a4542]/80 mb-2 ml-1">Fotos e vídeos</label>
                 <div className={`relative border-2 border-dashed rounded-3xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${files.length > 0 ? 'border-[#e8ede7] bg-[#fbf9f6]' : 'border-[#e8ede7] hover:border-[#a89f91] bg-[#fbf9f6]'}`}>
-                  <input type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" onChange={handleFileChange} />
+                  <input type="file" multiple accept="image/*,video/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" onChange={handleFileChange} />
                   <div className="bg-white p-4 rounded-full shadow-sm mb-4 text-[#a89f91] border border-[#e8ede7]/50 relative z-10">
                     <UploadCloud strokeWidth={1.5} size={28} />
                   </div>
                   <p className="text-base text-[#4a4542] font-medium mb-1 relative z-10">Toque para selecionar</p>
-                  <p className="text-sm text-[#4a4542]/60 relative z-10">até {MAX_FILES} fotos, {MAX_FILE_SIZE_MB} MB cada</p>
+                  <p className="text-sm text-[#4a4542]/60 relative z-10">até {MAX_FILES} arquivos</p>
+                  <p className="text-xs text-[#4a4542]/50 relative z-10 mt-1">foto até {MAX_PHOTO_SIZE_MB} MB · vídeo até {MAX_VIDEO_SIZE_MB} MB</p>
                 </div>
 
                 {files.length > 0 && (
@@ -249,7 +281,7 @@ export default function App() {
                     {files.map((file, index) => (
                       <div key={`${file.name}-${index}`} className="flex items-center justify-between bg-[#fbf9f6] border border-[#e8ede7] p-3 rounded-xl">
                         <div className="flex items-center gap-3 overflow-hidden">
-                          <div className="bg-[#f4ece8] p-2 rounded-lg text-[#a89f91]"><ImageIcon size={16} /></div>
+                          <div className="bg-[#f4ece8] p-2 rounded-lg text-[#a89f91]">{isVideoFile(file) ? <FileVideo size={16} /> : <ImageIcon size={16} />}</div>
                           <div className="overflow-hidden">
                             <span className="block text-sm text-[#4a4542] truncate max-w-[200px]">{file.name}</span>
                             <span className="block text-xs text-[#4a4542]/50">{formatFileSize(file.size)}</span>
@@ -261,7 +293,7 @@ export default function App() {
                   </div>
                 )}
 
-                {files.length > 0 && <p className="text-xs text-[#4a4542]/60 mt-3">Selecionadas: {files.length}/{MAX_FILES} fotos · Total: {formatFileSize(totalSize)}</p>}
+                {files.length > 0 && <p className="text-xs text-[#4a4542]/60 mt-3">Selecionados: {files.length}/{MAX_FILES} arquivos · Total: {formatFileSize(totalSize)}</p>}
                 {error && <p className="text-sm text-red-500 mt-3 bg-red-50 border border-red-100 rounded-2xl p-3">{error}</p>}
               </div>
 
@@ -270,7 +302,7 @@ export default function App() {
                   {status === 'uploading' ? (
                     <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Enviando...</>
                   ) : (
-                    <><CheckCircle2 size={22} /> Enviar {files.length > 0 ? `${files.length} ` : ''}foto(s)</>
+                    <><CheckCircle2 size={22} /> Enviar {files.length > 0 ? `${files.length} ` : ''}arquivo(s)</>
                   )}
                 </button>
                 <a href="/galeria" className="mt-3 w-full bg-[#fbf9f6] text-[#4a4542] py-4 px-6 rounded-2xl font-medium text-lg border border-[#e8ede7] shadow-sm hover:bg-[#e8ede7] transition-colors flex items-center justify-center gap-3 active:scale-[0.98]">
